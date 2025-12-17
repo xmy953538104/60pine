@@ -1,4 +1,4 @@
-name: CI
+name: CI-no sync
 
 on:
   workflow_dispatch:
