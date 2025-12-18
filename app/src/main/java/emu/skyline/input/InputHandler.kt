@@ -18,6 +18,8 @@ import emu.skyline.utils.u64
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
+import android.os.Handler
+import android.os.Looper
 
 /**
  * Handles input events during emulation
@@ -114,6 +116,15 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
     private var motionAxisOrientationY = SensorManager.AXIS_X
     private var buttonEventListener: OnButtonEventListener? = null
 
+    // 新增：高频刷新手柄状态，减少蓝牙延迟
+    private val highPollHandler = Handler(Looper.getMainLooper())
+    private val highPollRunnable = object : Runnable {
+        override fun run() {
+            updateControllers()  // 强制刷新手柄状态到游戏
+            highPollHandler.postDelayed(this, 4)  // 每4毫秒重复一次（可改2-5）
+        }
+    }
+    
     /**
      * Initializes all of the controllers from [InputManager] on the guest
      */
@@ -137,6 +148,7 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
         }
 
         updateControllers()
+        highPollHandler.post(highPollRunnable)
     }
 
     fun setControllerButtonEventListener(listener: OnButtonEventListener?) {
