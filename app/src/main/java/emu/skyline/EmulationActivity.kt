@@ -87,6 +87,9 @@ import java.nio.ByteOrder
 import java.util.concurrent.FutureTask
 import javax.inject.Inject
 import kotlin.math.abs
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import kotlinx.coroutines.*
 
 private const val ActionPause = "${BuildConfig.APPLICATION_ID}.ACTION_EMULATOR_PAUSE"
@@ -801,22 +804,31 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
            }
        }
 
+    // 新增：读电池温度（单位°C，Y700三代玩游戏时准，实时变）
+    private fun getBatteryTemperature(): Float {
+        val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val temperature = batteryIntent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0
+        return temperature / 10.0f  // 系统给的是0.1°C，除10转成正常°C，如48.0
+    }
+    
     private fun updateThermalStatus() {
         binding.thermalIndicator.apply {
             thermalIndicatorRunnable = object : Runnable {
                  override fun run() {
-                     val statusText = when (powerManager.currentThermalStatus) {
-                         PowerManager.THERMAL_STATUS_NONE -> "NORMAL"
-                         PowerManager.THERMAL_STATUS_LIGHT -> "LIGHT THROTTLING"
-                         PowerManager.THERMAL_STATUS_MODERATE -> "MODERATE THROTTLING"
-                         PowerManager.THERMAL_STATUS_SEVERE -> "SEVERE THROTTLING"
-                         PowerManager.THERMAL_STATUS_CRITICAL -> "CRITICAL THROTTLING"
-                         PowerManager.THERMAL_STATUS_EMERGENCY -> "EMERGENCY THROTTLING"
-                         else -> "NORMAL"
-                     }
-                     text = "$statusText"
-                     postDelayed(this, 250)
-                 }
+                  val temp = getBatteryTemperature()  // 读当前温度
+                  val tempText = String.format("%.0f°C", temp)  // 转成“48°C”（整数，无小数）
+
+                  // 可选：根据温度变文字颜色（凉绿、正常黄、烫红）
+                  val color = when {
+                      temp < 40 -> Color.GREEN      // 凉快，绿色
+                      temp < 55 -> Color.YELLOW     // 正常热，黄色
+                      else -> Color.RED             // 烫了，红色提醒散热
+                  }
+                  setTextColor(color)  // 文字变色
+                  text = tempText  // 显示如“48°C”（简洁）  // 或 "Temp: $tempText" 加前缀
+
+                  postDelayed(this, 250)  // 每250ms更新一次（和原版一样）
+              }
             }
             postDelayed(thermalIndicatorRunnable, 250)
         } 
