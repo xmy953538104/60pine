@@ -11,8 +11,6 @@ import android.app.PictureInPictureParams
 import android.app.RemoteAction
 import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.res.AssetManager
 import android.content.res.Configuration
