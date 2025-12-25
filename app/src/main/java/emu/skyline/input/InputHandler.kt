@@ -121,7 +121,7 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
     private val highPollRunnable = object : Runnable {
         override fun run() {
             updateControllers()  // 强制刷新手柄状态到游戏
-            highPollHandler.postDelayed(this, 4)  // 每4毫秒重复一次（可改2-5）
+            highPollHandler.postDelayed(this, 2)  // 每4毫秒重复一次（可改2-5）
         }
     }
     
