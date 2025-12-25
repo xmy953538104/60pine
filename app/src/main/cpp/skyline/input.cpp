@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright © 2022 Skyline Team and Contributors (https://github.com/skyline-emu/)
 
+#include <sched.h>
 #include <common/signal.h>
 #include <loader/loader.h>
 #include <kernel/types/KProcess.h>
@@ -16,6 +17,7 @@ namespace skyline::input {
           updateThread{&Input::UpdateThread, this} {}
 
     void Input::UpdateThread() {
+        pthread_setschedparam(pthread_self(), SCHED_RR, &(sched_param){ .sched_priority = 20 });  // 高优先级（20中等，试10-30）
         if (int result{pthread_setname_np(pthread_self(), "Sky-Input")})
             LOGW("Failed to set the thread name: {}", strerror(result));
         AsyncLogger::UpdateTag();

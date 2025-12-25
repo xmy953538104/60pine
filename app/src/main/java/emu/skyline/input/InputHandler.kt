@@ -156,47 +156,7 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
     }
 
     fun initialiseMotionSensors(context : Context) {
-        val sensorManager = context.getSystemService<SensorManager>() ?: return
-        val sensorList = sensorManager.getSensorList(Sensor.TYPE_ALL)
-        val hasRotationVector = sensorList.any { sensor -> sensor.type == Sensor.TYPE_ROTATION_VECTOR }
-
-        sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.also { accelerometer ->
-            sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
-        }
-        sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)?.also { gyroscope ->
-            sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_GAME)
-        }
-        sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)?.also { rotationVector ->
-            sensorManager.registerListener(this, rotationVector, SensorManager.SENSOR_DELAY_GAME)
-        }
-        // Avoid listening to two rotation vectors at once
-        if (!hasRotationVector) {
-            sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)?.also { rotationVector ->
-                sensorManager.registerListener(this, rotationVector, SensorManager.SENSOR_DELAY_GAME)
-            }
-        }
-
-        setMotionOrientation90()
-        val orientationEventListener = object : OrientationEventListener(context) {
-            override fun onOrientationChanged(orientation : Int) {
-                when {
-                    isWithinOrientationRange(orientation, 270) -> {
-                        setMotionOrientation270()
-                    }
-                    isWithinOrientationRange(orientation, 90) -> {
-                        setMotionOrientation90()
-                    }
-                }
-            }
-
-            private fun isWithinOrientationRange(
-                currentOrientation : Int, targetOrientation : Int, epsilon : Int = 90
-            ) : Boolean {
-                return currentOrientation > targetOrientation - epsilon
-                        && currentOrientation < targetOrientation + epsilon
-            }
-        }
-        orientationEventListener.enable()
+        return  // 新增：直接返回，不初始化体感（减蓝牙延迟）
     }
 
     /**
@@ -257,8 +217,14 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
             }
 
             else -> false
-        }
+      }
+
+    if (handled) {
+        updateControllers()  // 新增：只要事件处理了，就立刻刷新状态到游戏（减蓝牙延迟）
     }
+
+    return handled
+}
 
     /**
      * The last value of the axes so the stagnant axes can be eliminated to not wastefully look them up
@@ -315,6 +281,8 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
                 axesHistory[axisItem.index] = value
             }
 
+            updateControllers()  // 新增：摇杆移动事件处理完，立刻刷新（摇杆延迟减最大）
+
             return true
         }
 
@@ -327,53 +295,7 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
      * This handles translating any [SensorEvent]s to a [GuestEvent] that is passed into libskyline
      */
     override fun onSensorChanged(event : SensorEvent) {
-        when (event.sensor.type) {
-            Sensor.TYPE_ACCELEROMETER -> {
-                motionSensor.accelerometer[0] = motionAcelOrientation[0] * event.values[1] / SensorManager.GRAVITY_EARTH
-                motionSensor.accelerometer[1] = motionAcelOrientation[1] * event.values[0] / SensorManager.GRAVITY_EARTH
-                motionSensor.accelerometer[2] = motionAcelOrientation[2] * event.values[2] / SensorManager.GRAVITY_EARTH
-            }
-
-            Sensor.TYPE_GYROSCOPE -> {
-                // Investigate why sensor value is off by 12x
-                motionSensor.gyroscope[0] = motionGyroOrientation[0] * event.values[1] / 12.0f
-                motionSensor.gyroscope[1] = motionGyroOrientation[1] * event.values[0] / 12.0f
-                motionSensor.gyroscope[2] = motionGyroOrientation[2] * event.values[2] / 12.0f
-            }
-
-            Sensor.TYPE_ROTATION_VECTOR -> {
-                motionSensor.quaternion[0] = event.values[1]
-                motionSensor.quaternion[1] = event.values[0]
-                motionSensor.quaternion[2] = event.values[2]
-                motionSensor.quaternion[3] = event.values[3]
-                SensorManager.getRotationMatrixFromVector(motionRotationMatrix, motionSensor.quaternion)
-                SensorManager.remapCoordinateSystem(motionRotationMatrix, motionAxisOrientationX, motionAxisOrientationY, motionSensor.orientationMatrix)
-            }
-
-            Sensor.TYPE_GAME_ROTATION_VECTOR -> {
-                motionSensor.quaternion[0] = event.values[1]
-                motionSensor.quaternion[1] = event.values[0]
-                motionSensor.quaternion[2] = event.values[2]
-                motionSensor.quaternion[3] = event.values[3]
-                SensorManager.getRotationMatrixFromVector(motionRotationMatrix, motionSensor.quaternion)
-                SensorManager.remapCoordinateSystem(motionRotationMatrix, motionAxisOrientationX, motionAxisOrientationY, motionSensor.orientationMatrix)
-            }
-
-            else -> {}
-        }
-
-        // Only update state on accelerometer data
-        if (event.sensor.type != Sensor.TYPE_ACCELEROMETER)
-            return
-
-        motionSensor.deltaTimestamp = event.timestamp.toULong() - motionSensor.timestamp
-        motionSensor.timestamp = event.timestamp.toULong()
-        motionDataBuffer.clear()
-        setMotionState(0, 0, motionSensor.writeToByteBuffer(motionDataBuffer))
-        motionDataBuffer.clear()
-        setMotionState(0, 1, motionSensor.writeToByteBuffer(motionDataBuffer))
-        motionDataBuffer.clear()
-        setMotionState(0, 2, motionSensor.writeToByteBuffer(motionDataBuffer))
+        return  // 不处理体感数据
     }
 
     fun handleTouchEvent(view : View, event : MotionEvent) : Boolean {

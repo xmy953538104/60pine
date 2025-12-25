@@ -88,6 +88,8 @@ import kotlin.math.abs
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import kotlinx.coroutines.*
 
 private const val ActionPause = "${BuildConfig.APPLICATION_ID}.ACTION_EMULATOR_PAUSE"
@@ -146,6 +148,24 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
 
     private var isEmulatorPaused = false
 
+    // 新增：内置蓝牙保持活跃（防系统降频，减手柄延迟，不用额外app）
+    private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+    private val keepAliveHandler = Handler(Looper.getMainLooper())
+    private val keepAliveRunnable = object : Runnable {
+        override fun run() {
+            // 每20秒戳一下已连接的手柄（轻量操作）
+            bluetoothAdapter?.bondedDevices?.forEach { device ->
+                if (device.type == BluetoothDevice.DEVICE_TYPE_LE || device.type == BluetoothDevice.DEVICE_TYPE_CLASSIC) {
+                    // 极小查询，防止蓝牙睡觉
+                    try {
+                        val method = device.javaClass.getMethod("createBond")
+                        method.invoke(device)
+                    } catch (e: Exception) { /* 忽略错误 */ }
+                }
+            }
+            keepAliveHandler.postDelayed(this, 20000)  // 20秒后重复（可改15000=15秒）
+        }
+    }
     private var isPerfStatsRunnableCallbackExist = false
     private var isThermalIndicatorRunnableCallbackExist = false
 
@@ -627,6 +647,8 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
             GpuDriverHelper.forceMaxGpuClocks(false)
 
         pauseEmulator()
+
+        keepAliveHandler.removeCallbacks(keepAliveRunnable)  // 新增：停止蓝牙保持活跃
     }
 
     override fun onControllerButtonPressed(buttonId: ButtonId, PRESSED: Boolean) {
@@ -661,6 +683,8 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
         resumeEmulator()
 
         GpuDriverHelper.forceMaxGpuClocks(emulationSettings.forceMaxGpuClocks)
+       
+        keepAliveHandler.post(keepAliveRunnable) // 新增：启动蓝牙保持活跃
 
         enableDynamicResolution(emulationSettings.enableDynamicResolution)
 
@@ -1033,37 +1057,8 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
     @SuppressLint("WrongConstant")
     @Suppress("unused")
     fun vibrateDevice(index : Int, timing : LongArray, amplitude : IntArray) {
-        val vibrator = if (vibrators[index] != null) {
-            vibrators[index]
-        } else {
-            inputManager.controllers[index]!!.rumbleDeviceDescriptor?.let {
-                if (it == Controller.BuiltinRumbleDeviceDescriptor) {
-                    vibrators[index] = builtinVibrator
-                    builtinVibrator
-                } else {
-                    for (id in InputDevice.getDeviceIds()) {
-                        val device = InputDevice.getDevice(id)
-                        if (device?.descriptor == inputManager.controllers[index]!!.rumbleDeviceDescriptor) {
-                            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                device?.vibratorManager!!.defaultVibrator
-                            } else {
-                                @Suppress("DEPRECATION")
-                                device?.vibrator!!
-                            }
-                            vibrators[index] = vibrator
-                            return@let vibrator
-                        }
-                    }
-                    return@let null
-                }
-            }
-        }
-
-        vibrator?.let {
-            val effect = VibrationEffect.createWaveform(timing, amplitude, 0)
-            it.vibrate(effect)
-        }
-    }
+                    return  //直接返回，不发振动
+           }
 
     @Suppress("unused")
     fun clearVibrationDevice(index : Int) {
