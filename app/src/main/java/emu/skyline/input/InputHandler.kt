@@ -20,6 +20,7 @@ import java.nio.ByteOrder
 import kotlin.math.abs
 import android.os.Handler
 import android.os.Looper
+import android.os.HandlerThread
 import android.view.OrientationEventListener
 
 /**
