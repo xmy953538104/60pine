@@ -20,6 +20,7 @@ import java.nio.ByteOrder
 import kotlin.math.abs
 import android.os.Handler
 import android.os.Looper
+import android.view.OrientationEventListener
 
 /**
  * Handles input events during emulation
@@ -116,14 +117,15 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
     private var motionAxisOrientationY = SensorManager.AXIS_X
     private var buttonEventListener: OnButtonEventListener? = null
 
-    // 新增：高频刷新手柄状态，减少蓝牙延迟
-    private val highPollHandler = Handler(Looper.getMainLooper())
+    // 新增：高频刷新手柄状态，减少蓝牙延迟（专用后台线程）
+    private val highPollThread = HandlerThread("SkylineInputHighPoll").also { it.start() }
+    private val highPollHandler = Handler(highPollThread.looper!!)
     private val highPollRunnable = object : Runnable {
-        override fun run() {
-            updateControllers()  // 强制刷新手柄状态到游戏
-            highPollHandler.postDelayed(this, 2)  // 每4毫秒重复一次（可改2-5）
-        }
+    override fun run() {
+        updateControllers()  // 强制刷新手柄状态到游戏
+        highPollHandler.postDelayed(this, 2)  // 建议先用4ms，稳一点，延迟低又不费电
     }
+}
     
     /**
      * Initializes all of the controllers from [InputManager] on the guest
@@ -235,27 +237,29 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
     fun handleKeyEvent(event : KeyEvent) : Boolean {
         if (event.repeatCount != 0)
             return false
-
-        val action = when (event.action) {
-            KeyEvent.ACTION_DOWN -> ButtonState.Pressed
-            KeyEvent.ACTION_UP -> ButtonState.Released
-            else -> return false
-        }
+        val pressed = when (event.action) {
+    KeyEvent.ACTION_DOWN -> true
+    KeyEvent.ACTION_UP -> false
+    else -> return false
+}
 
         return when (val guestEvent = inputManager.eventMap[KeyHostEvent(event.device.descriptor, event.keyCode)]) {
             is ButtonGuestEvent -> {
                 if (isKotlinHandle(guestEvent.button)) 
-                    buttonEventListener?.onControllerButtonPressed(guestEvent.button, action.state)
+                    buttonEventListener?.onControllerButtonPressed(guestEvent.button, pressed)
                 if (!isKotlinHandle(guestEvent.button))
-                    setButtonState(guestEvent.id, guestEvent.button.value, action.state)
+                    setButtonState(guestEvent.id, guestEvent.button.value, pressed)
                 true
             }
 
             is AxisGuestEvent -> {
-                setAxisValue(guestEvent.id, guestEvent.axis.ordinal, (if (action == ButtonState.Pressed) if (guestEvent.polarity) Short.MAX_VALUE else Short.MIN_VALUE else 0).toInt())
+                setAxisValue(
+                    guestEvent.id,
+                    guestEvent.axis.ordinal,
+                    (if (pressed) if (guestEvent.polarity) Short.MAX_VALUE else Short.MIN_VALUE else 0).toInt()
+                )
                 true
             }
-
             else -> false
         }
     }
@@ -298,9 +302,9 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
 
                     when (guestEvent) {
                         is ButtonGuestEvent -> {
-                            val action = if (abs(value) >= guestEvent.threshold) ButtonState.Pressed.state else ButtonState.Released.state
-                            if (!isKotlinHandle(guestEvent.button))
-                                setButtonState(guestEvent.id, guestEvent.button.value, action)
+                            val pressed = abs(value) >= guestEvent.threshold
+                             if (!isKotlinHandle(guestEvent.button))
+                                setButtonState(guestEvent.id, guestEvent.button.value, pressed)
                         }
 
                         is AxisGuestEvent -> {
@@ -384,8 +388,8 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
             val pointer = MotionEvent.PointerCoords()
             event.getPointerCoords(index, pointer)
 
-            val x = 0f.coerceAtLeast(pointer.x * 1280 / view.width).toInt()
-            val y = 0f.coerceAtLeast(pointer.y * 720 / view.height).toInt()
+            val x = (pointer.x * 1280f / view.width).coerceIn(0f, 1280f).toInt()
+            val y = (pointer.y * 720f / view.height).coerceIn(0f, 720f).toInt()
 
             val attribute = when (event.action) {
                 MotionEvent.ACTION_DOWN -> 1
@@ -411,7 +415,12 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
         return inputManager.controllers[0]?.type ?: ControllerType.None
     }
 
+    fun stopHighPoll() {
+        highPollHandler.removeCallbacks(highPollRunnable)
+        highPollThread.quitSafely()
+    }
+    
     interface OnButtonEventListener {
-       fun onControllerButtonPressed(buttonId: ButtonId, PRESSED: Boolean)
+       fun onControllerButtonPressed(buttonId: ButtonId, pressed: Boolean)
     }
 }
