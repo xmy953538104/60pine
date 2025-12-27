@@ -124,7 +124,7 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
     private val highPollRunnable = object : Runnable {
     override fun run() {
         updateControllers()  // 强制刷新手柄状态到游戏
-        highPollHandler.postDelayed(this, 2)  // 建议先用4ms，稳一点，延迟低又不费电
+        highPollHandler.postDelayed(this, 1)  // 建议先用4ms，稳一点，延迟低又不费电
     }
 }
     
