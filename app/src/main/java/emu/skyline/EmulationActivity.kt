@@ -358,7 +358,9 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
         window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         inputHandler = InputHandler(inputManager, emulationSettings)
         setContentView(binding.root)
-
+        
+        binding.drawerLayout.setScrimColor(Color.TRANSPARENT)
+        
         builtinVibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vibratorManager.defaultVibrator
