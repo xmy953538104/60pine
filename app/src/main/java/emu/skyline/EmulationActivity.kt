@@ -733,12 +733,12 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
                 }
 
                 R.id.menu_show_fps -> {
-                    enablePerfStats(!isPerfStatsRunnableCallbackExist)
+                    enablePerfStats(!isPerfStatsEnabled)
                     true
                 }
 
                 R.id.menu_thermal_indicator -> {
-                    enableThermalIndicator(!isThermalIndicatorRunnableCallbackExist)
+                    enableThermalIndicator(!isThermalEnabled)
                     true
                 }
 
