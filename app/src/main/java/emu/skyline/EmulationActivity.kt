@@ -1019,12 +1019,18 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
     }
 
     override fun dispatchKeyEvent(event : KeyEvent) : Boolean {
-        return if (inputHandler.handleKeyEvent(event)) true else super.dispatchKeyEvent(event)
-    }
+    return if (inputHandler.handleKeyEvent(event)) {
+        inputHandler.updateControllers()  // <--- 新加这一行
+        true
+    } else super.dispatchKeyEvent(event)
+}
 
     override fun dispatchGenericMotionEvent(event : MotionEvent) : Boolean {
-        return if (inputHandler.handleMotionEvent(event)) true else super.dispatchGenericMotionEvent(event)
-    }
+    return if (inputHandler.handleMotionEvent(event)) {
+        inputHandler.updateControllers()  // <--- 新加这一行
+        true
+    } else super.dispatchGenericMotionEvent(event)
+}
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(view : View, event : MotionEvent) : Boolean {
