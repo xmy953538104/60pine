@@ -420,6 +420,10 @@ class InputHandler(private val inputManager : InputManager, private val emulatio
         highPollHandler.removeCallbacks(highPollRunnable)
         highPollThread.quitSafely()
     }
+
+    fun refreshControllers() {
+    highPollRunnable.run()
+    }
     
     interface OnButtonEventListener {
        fun onControllerButtonPressed(buttonId: ButtonId, pressed: Boolean)
