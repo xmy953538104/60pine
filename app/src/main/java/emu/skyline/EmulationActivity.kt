@@ -1020,14 +1020,14 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
 
     override fun dispatchKeyEvent(event : KeyEvent) : Boolean {
     return if (inputHandler.handleKeyEvent(event)) {
-        inputHandler.updateControllers()  // <--- 新加这一行
+        inputHandler.update()  // <--- 新加这一行
         true
     } else super.dispatchKeyEvent(event)
 }
 
     override fun dispatchGenericMotionEvent(event : MotionEvent) : Boolean {
     return if (inputHandler.handleMotionEvent(event)) {
-        inputHandler.updateControllers()  // <--- 新加这一行
+        inputHandler.update()  // <--- 新加这一行
         true
     } else super.dispatchGenericMotionEvent(event)
 }
