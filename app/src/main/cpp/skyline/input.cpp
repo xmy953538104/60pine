@@ -35,8 +35,8 @@ namespace skyline::input {
                 }
             };
 
-            constexpr std::chrono::milliseconds NPadUpdatePeriod{2}; //!< The period at which a Joy-Con is updated (500Hz)
-            constexpr std::chrono::milliseconds TouchUpdatePeriod{2}; //!< The period at which the touch screen is updated (500Hz)
+            constexpr std::chrono::milliseconds NPadUpdatePeriod{1}; //!< The period at which a Joy-Con is updated (1000Hz)
+            constexpr std::chrono::milliseconds TouchUpdatePeriod{1}; //!< The period at which the touch screen is updated (1000Hz)
 
             std::array<UpdateCallback, 2> updateCallbacks{
                 UpdateCallback{NPadUpdatePeriod, [&](UpdateCallback &callback) {

@@ -88,6 +88,8 @@ import kotlin.math.abs
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.text.SpannableString  // 新增：用于 spannable 文本
+import android.text.style.ForegroundColorSpan  // 新增：用于设置颜色
 import kotlinx.coroutines.*
 
 private const val ActionPause = "${BuildConfig.APPLICATION_ID}.ACTION_EMULATOR_PAUSE"
@@ -146,14 +148,13 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
 
     private var isEmulatorPaused = false
 
-    private var isPerfStatsRunnableCallbackExist = false
-    private var isThermalIndicatorRunnableCallbackExist = false
+    private var isPerfStatsEnabled = false  // 新增：跟踪 FPS/内存 是否启用
+    private var isThermalEnabled = false  // 新增：跟踪温度是否启用
+    private var isStatsRunnableExist = false  // 新增：跟踪统一 Runnable 是否运行
 
     private lateinit var pictureInPictureParamsBuilder : PictureInPictureParams.Builder
 
-    private lateinit var perfStatsRunnable: Runnable
-    private lateinit var thermalIndicatorRunnable: Runnable
-
+    private lateinit var statsRunnable: Runnable  // 新增：统一 Runnable
     private lateinit var powerManager: PowerManager
 
     @Inject
@@ -357,7 +358,9 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
         window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         inputHandler = InputHandler(inputManager, emulationSettings)
         setContentView(binding.root)
-
+        
+        binding.drawerLayout.setScrimColor(Color.TRANSPARENT)
+        
         builtinVibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vibratorManager.defaultVibrator
@@ -718,11 +721,11 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
         popupMenu.menuInflater.inflate(R.menu.menu_overlay_options, popupMenu.menu)
 
         popupMenu.menu.apply {
-            findItem(R.id.menu_show_overlay).isChecked = !binding.onScreenControllerView.isInvisible
-            findItem(R.id.menu_show_fps).isChecked = isPerfStatsRunnableCallbackExist
-            findItem(R.id.menu_thermal_indicator).isChecked = isThermalIndicatorRunnableCallbackExist
-            findItem(R.id.menu_haptic_feedback).isChecked = binding.onScreenControllerView.hapticFeedback
-        }
+    findItem(R.id.menu_show_overlay).isChecked = !binding.onScreenControllerView.isInvisible
+    findItem(R.id.menu_show_fps).isChecked = isPerfStatsEnabled  // 修改：用新标志
+    findItem(R.id.menu_thermal_indicator).isChecked = isThermalEnabled  // 修改：用新标志
+    findItem(R.id.menu_haptic_feedback).isChecked = binding.onScreenControllerView.hapticFeedback
+}
 
         popupMenu.setOnMenuItemClickListener {
             when (it.itemId) {
@@ -732,12 +735,12 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
                 }
 
                 R.id.menu_show_fps -> {
-                    enablePerfStats(!isPerfStatsRunnableCallbackExist)
+                    enablePerfStats(!isPerfStatsEnabled)
                     true
                 }
 
                 R.id.menu_thermal_indicator -> {
-                    enableThermalIndicator(!isThermalIndicatorRunnableCallbackExist)
+                    enableThermalIndicator(!isThermalEnabled)
                     true
                 }
 
@@ -757,50 +760,24 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
         popupMenu.show()
     }
 
-    private fun enablePerfStats(isEnable : Boolean) {
-        if (!isEnable) {
-            if (isPerfStatsRunnableCallbackExist) {
-                binding.perfStats.apply {
-                    removeCallbacks(perfStatsRunnable)
-                    text = ""
-                }
-                isPerfStatsRunnableCallbackExist = false
-            }
-        } else {
-            binding.perfStats.apply {
-                perfStatsRunnable = object : Runnable {
-                    override fun run() {
-                        updatePerformanceStatistics()
-                        // We read the `VmRSS` value from the kernel
-                        val ramUsage = File("/proc/self/statm").readLines()[0].split(' ')[1].toLong() * 4096 / 1000000
-                        text = "$fps FPS • $ramUsage MB"
-                        postDelayed(this, 250)
-                    }
-                 }
-                 postDelayed(perfStatsRunnable, 250)
-            }
-            isPerfStatsRunnableCallbackExist = true
-        }
-    }
+    private fun enablePerfStats(isEnable: Boolean) {
+    isPerfStatsEnabled = isEnable  // 设置标志
+    updateStatsDisplay()  // 新增调用：统一处理 Runnable 和文本
+}
 
     private fun enableThermalIndicator(isEnable: Boolean) {
-            if (!isEnable) {
-                if (isThermalIndicatorRunnableCallbackExist) {
-                    binding.thermalIndicator.apply {
-                        removeCallbacks(thermalIndicatorRunnable)
-                        text = ""
-                    }
-                }
-                isThermalIndicatorRunnableCallbackExist = false
-            } else {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    isThermalIndicatorRunnableCallbackExist = true
-                    updateThermalStatus()        
-               } else {
-                   binding.thermalIndicator.text = "Thermal monitoring not supported on this device"
-               }
-           }
-       }
+    if (!isEnable) {
+        isThermalEnabled = false
+    } else {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            isThermalEnabled = true
+        } else {
+            binding.perfStats.text = "Thermal monitoring not supported on this device"  // 修改：显示在 perfStats
+            return  // 不启用
+        }
+    }
+    updateStatsDisplay()  // 新增调用：统一处理
+}
 
     // 新增：读电池温度（单位°C，Y700三代玩游戏时准，实时变）
     private fun getBatteryTemperature(): Float {
@@ -809,28 +786,59 @@ class EmulationActivity : AppCompatActivity(), SurfaceHolder.Callback, View.OnTo
         return temperature / 10.0f  // 系统给的是0.1°C，除10转成正常°C，如48.0
     }
     
-    private fun updateThermalStatus() {
-        binding.thermalIndicator.apply {
-            thermalIndicatorRunnable = object : Runnable {
-                 override fun run() {
-                  val temp = getBatteryTemperature()  // 读当前温度
-                  val tempText = String.format("%.0f°C", temp)  // 转成“48°C”（整数，无小数）
+    private fun updateStatsDisplay() {
+    binding.perfStats.apply {
+        if (isStatsRunnableExist) {
+            removeCallbacks(statsRunnable)  // 先移除旧回调
+            isStatsRunnableExist = false
+        }
+        text = ""  // 先清空
 
-                  // 可选：根据温度变文字颜色（凉绿、正常黄、烫红）
-                  val color = when {
-                      temp < 40 -> Color.GREEN      // 凉快，绿色
-                      temp < 55 -> Color.YELLOW     // 正常热，黄色
-                      else -> Color.RED             // 烫了，红色提醒散热
-                  }
-                  setTextColor(color)  // 文字变色
-                  text = tempText  // 显示如“48°C”（简洁）  // 或 "Temp: $tempText" 加前缀
+        if (isPerfStatsEnabled || isThermalEnabled) {  // 如果任何一个启用
+            statsRunnable = object : Runnable {
+                override fun run() {
+                    var displayText = ""
+                    var spannable: SpannableString? = null
 
-                  postDelayed(this, 250)  // 每250ms更新一次（和原版一样）
-              }
+                    // 如果 FPS 启用，添加 FPS · MB
+                    if (isPerfStatsEnabled) {
+                        updatePerformanceStatistics()
+                        val ramUsage = File("/proc/self/statm").readLines()[0].split(' ')[1].toLong() * 4096 / 1000000
+                        displayText = "$fps FPS • $ramUsage MB"  // 注意：您的原代码用 •，保持一致
+                    }
+
+                    // 如果温度启用，附加或单独显示温度
+                    if (isThermalEnabled) {
+                        val temp = getBatteryTemperature()
+                        val tempText = String.format("%.0f°C", temp)
+                        if (displayText.isNotEmpty()) {
+                            displayText += " | $tempText"  // 附加 " | 0°C"
+                        } else {
+                            displayText = tempText  // 只温度
+                        }
+
+                        // 设置颜色（只为温度部分）
+                        spannable = SpannableString(displayText)
+                        val tempStart = displayText.lastIndexOf("°C") - tempText.length + 2  // 找到温度起始（处理有/无 | 的情况）
+                        val tempEnd = displayText.length
+                        val color = when {
+                            temp < 40 -> Color.GREEN
+                            temp < 55 -> Color.YELLOW
+                            else -> Color.RED
+                        }
+                        spannable.setSpan(ForegroundColorSpan(color), tempStart, tempEnd, 0)
+                    }
+
+                    text = spannable ?: displayText  // 如果有 spannable，用它；否则纯文本
+
+                    postDelayed(this, 250)
+                }
             }
-            postDelayed(thermalIndicatorRunnable, 250)
-        } 
+            postDelayed(statsRunnable, 250)
+            isStatsRunnableExist = true
+        }
     }
+}
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode : Boolean, newConfig : Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
