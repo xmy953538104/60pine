@@ -15,7 +15,7 @@ idea.module {
 
 android {
     namespace 'emu.skyline'
-    compileSdk 35
+    compileSdk 34
 
     var isBuildSigned = (System.getenv("CI") == "true") && (System.getenv("IS_BUILD_SIGNED") == "true")
 
@@ -23,7 +23,7 @@ android {
         applicationId "io.github.pine.emu"
 
         minSdk 29
-        targetSdk 35
+        targetSdk 34
 
         versionCode 2
         versionName "2.1.1"
@@ -73,7 +73,6 @@ android {
 
     buildTypes {
         release {
-            debuggable true
             externalNativeBuild {
                 cmake {
                     arguments "-DCMAKE_BUILD_TYPE=RELEASE",
